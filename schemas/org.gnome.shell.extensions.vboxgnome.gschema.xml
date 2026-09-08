@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.vboxgnome"
+          path="/org/gnome/shell/extensions/vboxgnome/">
+
+    <key name="start-mode" type="s">
+      <choices>
+        <choice value="window"/>
+        <choice value="headless"/>
+      </choices>
+      <default>"window"</default>
+      <summary>Default start mode</summary>
+      <description>Start machines with a window (separate front-end) or headless. Both modes allow attaching or detaching the window later.</description>
+    </key>
+
+    <key name="stop-mode" type="s">
+      <choices>
+        <choice value="acpipowerbutton"/>
+        <choice value="savestate"/>
+        <choice value="poweroff"/>
+      </choices>
+      <default>"acpipowerbutton"</default>
+      <summary>Default stop action</summary>
+      <description>Action used when a machine is switched off: acpipowerbutton, savestate or poweroff.</description>
+    </key>
+
+    <key name="refresh-interval" type="i">
+      <range min="2" max="300"/>
+      <default>10</default>
+      <summary>Refresh interval</summary>
+      <description>Seconds between virtual machine state refreshes.</description>
+    </key>
+
+    <key name="show-running-count" type="b">
+      <default>true</default>
+      <summary>Show running count</summary>
+      <description>Show the number of running machines next to the panel icon.</description>
+    </key>
+
+    <key name="show-window-toggle" type="b">
+      <default>true</default>
+      <summary>Show window toggle</summary>
+      <description>Show a Show window / Hide window entry for running headless machines.</description>
+    </key>
+
+  </schema>
+</schemalist>

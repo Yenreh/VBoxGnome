@@ -1,0 +1,52 @@
+.vbox-panel-count {
+    padding-left: 4px;
+    font-weight: bold;
+}
+
+/* Keeps the popup width stable while states change. */
+.vbox-machine-item {
+    min-width: 320px;
+}
+
+.vbox-machine-icon {
+    margin-right: 8px;
+}
+
+.vbox-dim {
+    opacity: 0.45;
+}
+
+.vbox-state-label {
+    margin: 0 10px;
+    opacity: 0.55;
+    font-size: 0.9em;
+}
+
+.vbox-window-button {
+    padding: 4px;
+    margin-right: 10px;
+    border-radius: 99px;
+    opacity: 0.6;
+}
+
+.vbox-window-button:hover,
+.vbox-window-button:focus {
+    background-color: rgba(255, 255, 255, 0.12);
+    opacity: 1;
+}
+
+.vbox-window-button:active {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* A window is currently attached to the machine. */
+.vbox-window-open {
+    opacity: 1;
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Not applicable: invisible, but still occupying its column. */
+.vbox-window-idle {
+    opacity: 0;
+    background-color: transparent;
+}

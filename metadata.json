@@ -1,0 +1,14 @@
+{
+  "uuid": "vboxgnome@yenreh.github.com",
+  "name": "VBoxGnome",
+  "description": "Start and stop VirtualBox virtual machines from the GNOME top bar.",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48"
+  ],
+  "settings-schema": "org.gnome.shell.extensions.vboxgnome",
+  "version": 1,
+  "version-name": "1.0.0"
+}

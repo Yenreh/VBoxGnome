@@ -11,7 +11,7 @@ glib-compile-schemas "$SRC/schemas"
 rm -rf "$DEST"
 mkdir -p "$DEST"
 cp -r "$SRC/metadata.json" "$SRC/extension.js" "$SRC/prefs.js" \
-      "$SRC/stylesheet.css" "$SRC/schemas" "$DEST/"
+      "$SRC/stylesheet.css" "$SRC/schemas" "$SRC/icons" "$DEST/"
 
 echo "Installed in $DEST"
 echo "Log out and back in (Wayland), then run: gnome-extensions enable $UUID"

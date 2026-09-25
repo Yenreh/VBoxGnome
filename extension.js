@@ -204,8 +204,10 @@ class VBoxIndicator extends PanelMenu.Button {
         this._destroyed = false;
 
         const box = new St.BoxLayout({style_class: 'panel-status-menu-box'});
+        // Shipped with the extension; the -symbolic.svg suffix makes it
+        // follow the panel foreground color.
         this._icon = new St.Icon({
-            icon_name: 'computer-symbolic',
+            gicon: Gio.icon_new_for_string(`${extension.path}/icons/vm-symbolic.svg`),
             style_class: 'system-status-icon',
         });
         this._count = new St.Label({

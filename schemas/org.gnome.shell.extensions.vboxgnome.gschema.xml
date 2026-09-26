@@ -33,5 +33,23 @@
       <description>Show a mode button on each machine that switches between window and headless: the start mode stored in VirtualBox while it is off, attach or detach the window while it runs.</description>
     </key>
 
+    <key name="panel-box" type="s">
+      <choices>
+        <choice value="left"/>
+        <choice value="center"/>
+        <choice value="right"/>
+      </choices>
+      <default>"right"</default>
+      <summary>Panel area</summary>
+      <description>Area of the top bar that holds the indicator: left, center or right.</description>
+    </key>
+
+    <key name="panel-position" type="i">
+      <range min="0" max="20"/>
+      <default>1</default>
+      <summary>Panel position</summary>
+      <description>Order of the indicator within its area. Lower numbers go further left, so indicators with different numbers keep their order whichever loads first.</description>
+    </key>
+
   </schema>
 </schemalist>

@@ -53,6 +53,8 @@ To uninstall, disable it and remove the directory:
 | --- | --- | --- |
 | `stop-mode` | `acpipowerbutton` | Stop action: ACPI shutdown, `savestate` or `poweroff` |
 | `refresh-interval` | `10` | Seconds between machine state refreshes |
+| `panel-box` | `right` | Top bar area: `left`, `center` or `right` |
+| `panel-position` | `1` | Order within the area, lower goes further left |
 | `show-running-count` | `true` | Number of running machines next to the panel icon |
 | `show-window-toggle` | `true` | Mode button: start mode while off, window attach / detach while running |
 

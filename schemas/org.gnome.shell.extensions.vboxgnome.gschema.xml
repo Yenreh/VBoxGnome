@@ -3,16 +3,6 @@
   <schema id="org.gnome.shell.extensions.vboxgnome"
           path="/org/gnome/shell/extensions/vboxgnome/">
 
-    <key name="start-mode" type="s">
-      <choices>
-        <choice value="window"/>
-        <choice value="headless"/>
-      </choices>
-      <default>"window"</default>
-      <summary>Default start mode</summary>
-      <description>Start machines with a window (separate front-end) or headless. Both modes allow attaching or detaching the window later.</description>
-    </key>
-
     <key name="stop-mode" type="s">
       <choices>
         <choice value="acpipowerbutton"/>
@@ -39,8 +29,8 @@
 
     <key name="show-window-toggle" type="b">
       <default>true</default>
-      <summary>Show window toggle</summary>
-      <description>Show a Show window / Hide window entry for running headless machines.</description>
+      <summary>Show mode button</summary>
+      <description>Show a mode button on each machine that switches between window and headless: the start mode stored in VirtualBox while it is off, attach or detach the window while it runs.</description>
     </key>
 
   </schema>

@@ -5,7 +5,6 @@ import Gtk from 'gi://Gtk';
 import {ExtensionPreferences, gettext as _} from
     'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-const START_MODES = ['window', 'headless'];
 const STOP_MODES = ['acpipowerbutton', 'savestate', 'poweroff'];
 
 function bindCombo(settings, key, row, values) {
@@ -27,14 +26,6 @@ export default class VBoxGnomePreferences extends ExtensionPreferences {
 
         const behaviour = new Adw.PreferencesGroup({title: _('Power')});
         page.add(behaviour);
-
-        const startRow = new Adw.ComboRow({
-            title: _('Start mode'),
-            subtitle: _('Both modes allow showing or hiding the window later'),
-            model: new Gtk.StringList({strings: [_('Window'), _('Headless')]}),
-        });
-        bindCombo(settings, 'start-mode', startRow, START_MODES);
-        behaviour.add(startRow);
 
         const stopRow = new Adw.ComboRow({
             title: _('Stop action'),
@@ -58,8 +49,8 @@ export default class VBoxGnomePreferences extends ExtensionPreferences {
         appearance.add(countRow);
 
         const windowRow = new Adw.SwitchRow({
-            title: _('Show window toggle'),
-            subtitle: _('Add a Show window / Hide window entry for running machines'),
+            title: _('Show mode button'),
+            subtitle: _('Pick the start mode while off, show or hide the window while running'),
         });
         settings.bind('show-window-toggle', windowRow, 'active',
             Gio.SettingsBindFlags.DEFAULT);

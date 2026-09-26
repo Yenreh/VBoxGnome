@@ -8,18 +8,24 @@ Tested on GNOME Shell 48 (Wayland) with VirtualBox 7.2.
 ## Features
 
 - One row per registered machine: icon, name, state and a power switch.
-- Power on and off is done only with the switch.
-- A display icon in the same row attaches or detaches the machine window without
-  stopping it. It is only active while the machine is running, and it is
-  highlighted when a window is open.
+- Power on and off is done only by clicking the switch; the row itself does
+  nothing, so a misclick never starts or stops a machine.
+- A mode button in the same row shows the current mode (window or headless)
+  and switches to the other one:
+  - While the machine is off, it changes the start mode stored in VirtualBox.
+  - While the machine is running, it attaches or detaches the window without
+    stopping the machine.
 - Fixed columns, so names of different lengths do not misalign states or switches.
 - Number of running machines in the panel.
 - No snapshot handling, no state discarding.
 
 ## Start and stop modes
 
-Machines are started either with a window (`startvm --type separate`) or headless
-(`startvm --type headless`). Both keep the machine process independent from the
+The start mode of each machine is its VirtualBox default front-end
+(`modifyvm --default-frontend`), the same setting VirtualBox Manager uses, so
+both always agree. Machines whose front-end is `headless` start with
+`startvm --type headless`; any other value starts them with a window through
+`startvm --type separate`. Both keep the machine process independent from the
 window, which is what makes attaching and detaching a window possible later.
 
 The stop action is configurable: ACPI shutdown (default), save state or power off.
@@ -45,11 +51,10 @@ To uninstall, disable it and remove the directory:
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `start-mode` | `window` | Start machines with a window or `headless` |
 | `stop-mode` | `acpipowerbutton` | Stop action: ACPI shutdown, `savestate` or `poweroff` |
 | `refresh-interval` | `10` | Seconds between machine state refreshes |
 | `show-running-count` | `true` | Number of running machines next to the panel icon |
-| `show-window-toggle` | `true` | Show window / hide window button on running machines |
+| `show-window-toggle` | `true` | Mode button: start mode while off, window attach / detach while running |
 
 ## Requirements
 

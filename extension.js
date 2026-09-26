@@ -53,6 +53,12 @@ function stateLabel(state) {
     }
 }
 
+// VirtualBox keeps the start mode of each machine as its default front-end.
+// Anything but headless opens a window.
+function startMode(vm) {
+    return vm.frontend === 'headless' ? 'headless' : 'window';
+}
+
 function runCommand(argv) {
     return new Promise((resolve, reject) => {
         let proc;
@@ -83,25 +89,34 @@ function spawnDetached(argv) {
         Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
 }
 
+// St ignores the CSS opacity property, so fading is done on the actors.
+const DIM_OPACITY = 115;
+const BUTTON_OPACITY = 153;
+const STATE_OPACITY = 140;
+
 const MachineItem = GObject.registerClass({
     Signals: {
         'power-requested': {param_types: [GObject.TYPE_BOOLEAN]},
-        'window-requested': {},
+        'mode-requested': {},
     },
 }, class MachineItem extends PopupMenu.PopupSwitchMenuItem {
-    _init(vm) {
+    // icons holds the machine icon and one icon per mode.
+    _init(vm, icons) {
         super._init(vm.name, false);
         this.add_style_class_name('vbox-machine-item');
+        // No hover highlight: the row itself is not a control.
+        this.track_hover = false;
+        this._icons = icons;
 
         // Fixed icon size, so every name starts at the same x position.
         this._machineIcon = new St.Icon({
-            icon_name: 'computer-symbolic',
+            gicon: icons.machine,
             icon_size: 16,
             style_class: 'vbox-machine-icon',
         });
         this.insert_child_at_index(this._machineIcon, 0);
 
-        // Only the name grows, so the state column, the window button and the
+        // Only the name grows, so the state column, the mode button and the
         // switch keep the same position no matter how long the name is.
         this.label.x_expand = true;
         this.label.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
@@ -109,6 +124,7 @@ const MachineItem = GObject.registerClass({
 
         this._stateLabel = new St.Label({
             style_class: 'vbox-state-label',
+            opacity: STATE_OPACITY,
             x_align: Clutter.ActorAlign.END,
             y_align: Clutter.ActorAlign.CENTER,
         });
@@ -116,17 +132,17 @@ const MachineItem = GObject.registerClass({
 
         // St.Button consumes its own clicks, so pressing it never reaches the
         // menu item and never flips the power switch.
-        this._windowButton = new St.Button({
-            style_class: 'vbox-window-button',
-            child: new St.Icon({
-                icon_name: 'video-display-symbolic',
-                icon_size: 16,
-            }),
+        this._modeIcon = new St.Icon({icon_size: 16});
+        this._modeButton = new St.Button({
+            style_class: 'vbox-mode-button',
+            child: this._modeIcon,
             can_focus: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this._windowButton.connect('clicked', () => this.emit('window-requested'));
-        this.insert_child_below(this._windowButton, this._statusBin);
+        this._mode = null;
+        this._modeButton.connect('clicked', () => this.emit('mode-requested'));
+        this._modeButton.connect('notify::hover', () => this._syncButton());
+        this.insert_child_below(this._modeButton, this._statusBin);
 
         // setToggleState() re-emits toggled, so only user clicks are forwarded.
         this.connect('toggled', (_item, state) => {
@@ -135,22 +151,56 @@ const MachineItem = GObject.registerClass({
         });
     }
 
-    // The default handler closes the whole menu after toggling, which forces
-    // the user to reopen it for every machine. Only flip the switch here.
-    activate(_event) {
-        if (this._switch.mapped)
+    // Power changes only from a click on the switch, so a misclick on the row
+    // (or Enter on a focused row) never starts or stops a machine. The default
+    // handler would also close the whole menu after every toggle.
+    activate(event) {
+        if (this._switch.mapped && this._hitsSwitch(event))
             this.toggle();
     }
 
-    _setButtonState(styleClass) {
-        this._windowButton.style_class = styleClass
-            ? `vbox-window-button ${styleClass}`
-            : 'vbox-window-button';
+    _hitsSwitch(event) {
+        const type = event?.type();
+        if (type !== Clutter.EventType.BUTTON_RELEASE &&
+            type !== Clutter.EventType.TOUCH_END)
+            return false;
+
+        const [x, y] = event.get_coords();
+        const [ok, lx, ly] = this._statusBin.transform_stage_point(x, y);
+        return ok && lx >= 0 && ly >= 0 &&
+            lx < this._statusBin.width && ly < this._statusBin.height;
+    }
+
+    _syncButton() {
+        const button = this._modeButton;
+        if (this._mode === null)
+            button.opacity = 0;
+        else if (button.hover)
+            button.opacity = 255;
+        else
+            button.opacity = BUTTON_OPACITY;
+    }
+
+    // mode is the current mode, or null when it cannot be changed now. The
+    // button keeps its slot even then, otherwise the state column would shift
+    // between rows.
+    _setMode(mode) {
+        this._mode = mode;
+        this._modeButton.reactive = mode !== null;
+        this._modeButton.can_focus = mode !== null;
+
+        if (mode !== null) {
+            this._modeIcon.gicon = this._icons[mode];
+            this._modeButton.accessible_name = mode === 'window'
+                ? _('Window, switch to headless')
+                : _('Headless, switch to window');
+        }
+        this._syncButton();
     }
 
     // pending is the state requested by the user while VBoxManage still runs,
     // or null when the reported state is the one to show.
-    update(vm, showWindowButton, pending = null) {
+    update(vm, {pending = null, showModeButton = true} = {}) {
         const waiting = pending !== null;
         const on = waiting ? pending : isOn(vm.state);
 
@@ -163,24 +213,18 @@ const MachineItem = GObject.registerClass({
         this.setToggleState(on);
         this._syncing = false;
 
-        if (on)
-            this._machineIcon.remove_style_class_name('vbox-dim');
+        this._machineIcon.opacity = on ? 255 : DIM_OPACITY;
+
+        // Off: the mode it starts in, as stored by VirtualBox. Running:
+        // whether a window is attached, which can change without stopping it.
+        if (!showModeButton || waiting || isBusy(vm.state))
+            this._setMode(null);
+        else if (!isOn(vm.state))
+            this._setMode(startMode(vm));
+        else if (vm.state === 'running' && vm.session !== 'GUI/Qt')
+            this._setMode(vm.frontendPid ? 'window' : 'headless');
         else
-            this._machineIcon.add_style_class_name('vbox-dim');
-
-        // The button keeps its slot even when it does not apply, otherwise the
-        // state column would shift between rows.
-        const detachable = vm.state === 'running' && vm.session !== 'GUI/Qt';
-        const usable = showWindowButton && detachable && !waiting;
-
-        this._windowButton.reactive = usable;
-        this._windowButton.can_focus = usable;
-        this._windowButton.accessible_name = vm.frontendPid
-            ? _('Hide window') : _('Show window');
-
-        this._setButtonState(usable
-            ? (vm.frontendPid ? 'vbox-window-open' : '')
-            : 'vbox-window-idle');
+            this._setMode(null);
     }
 });
 
@@ -203,11 +247,18 @@ class VBoxIndicator extends PanelMenu.Button {
         this._pendingPower = new Map();
         this._destroyed = false;
 
-        const box = new St.BoxLayout({style_class: 'panel-status-menu-box'});
-        // Shipped with the extension; the -symbolic.svg suffix makes it
+        // Shipped with the extension; the -symbolic.svg suffix makes them
         // follow the panel foreground color.
+        const icon = name => Gio.icon_new_for_string(`${extension.path}/icons/${name}-symbolic.svg`);
+        this._icons = {
+            machine: icon('vm'),
+            window: icon('mode-window'),
+            headless: icon('mode-headless'),
+        };
+
+        const box = new St.BoxLayout({style_class: 'panel-status-menu-box'});
         this._icon = new St.Icon({
-            gicon: Gio.icon_new_for_string(`${extension.path}/icons/vm-symbolic.svg`),
+            gicon: this._icons.machine,
             style_class: 'system-status-icon',
         });
         this._count = new St.Label({
@@ -225,7 +276,7 @@ class VBoxIndicator extends PanelMenu.Button {
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         const managerItem = new PopupMenu.PopupImageMenuItem(
-            _('VirtualBox Manager'), 'computer-symbolic');
+            _('VirtualBox Manager'), this._icons.machine);
         managerItem.connect('activate', () => this._launchManager());
         this.menu.addMenuItem(managerItem);
 
@@ -303,6 +354,7 @@ class VBoxIndicator extends PanelMenu.Button {
             machines.forEach((vm, i) => {
                 vm.state = details[i].state;
                 vm.session = details[i].session;
+                vm.frontend = details[i].frontend;
                 vm.frontendPid = frontends.get(vm.uuid) ?? frontends.get(vm.name) ?? 0;
             });
 
@@ -322,9 +374,14 @@ class VBoxIndicator extends PanelMenu.Button {
                 [this._vboxmanage, 'showvminfo', uuid, '--machinereadable']);
             const state = /^VMState="([^"]*)"/m.exec(out);
             const session = /^SessionName="([^"]*)"/m.exec(out);
-            return {state: state ? state[1] : 'unknown', session: session ? session[1] : ''};
+            const frontend = /^defaultfrontend="([^"]*)"/m.exec(out);
+            return {
+                state: state ? state[1] : 'unknown',
+                session: session ? session[1] : '',
+                frontend: frontend ? frontend[1] : '',
+            };
         } catch {
-            return {state: 'unknown', session: ''};
+            return {state: 'unknown', session: '', frontend: ''};
         }
     }
 
@@ -373,17 +430,23 @@ class VBoxIndicator extends PanelMenu.Button {
 
             for (const vm of machines) {
                 const uuid = vm.uuid;
-                const item = new MachineItem(vm);
+                const item = new MachineItem(vm, this._icons);
                 item.connect('power-requested', (_i, state) => this._togglePower(uuid, state));
-                item.connect('window-requested', () => this._toggleWindow(uuid));
+                item.connect('mode-requested', () => this._toggleMode(uuid));
                 this._machineSection.addMenuItem(item);
                 this._rows.set(uuid, item);
             }
         }
 
-        const showWindowButton = this._settings.get_boolean('show-window-toggle');
         for (const vm of machines)
-            this._rows.get(vm.uuid)?.update(vm, showWindowButton, this._pending(vm));
+            this._updateRow(vm);
+    }
+
+    _updateRow(vm) {
+        this._rows.get(vm.uuid)?.update(vm, {
+            pending: this._pending(vm),
+            showModeButton: this._settings.get_boolean('show-window-toggle'),
+        });
     }
 
     // Requested state, kept until the machine reports it or the wait times out,
@@ -404,18 +467,40 @@ class VBoxIndicator extends PanelMenu.Button {
 
     _setPending(vm, on) {
         this._pendingPower.set(vm.uuid, {on, since: GLib.get_monotonic_time()});
-        this._rows.get(vm.uuid)?.update(vm,
-            this._settings.get_boolean('show-window-toggle'), on);
+        this._updateRow(vm);
     }
 
     _clearPending(vm) {
         this._pendingPower.delete(vm.uuid);
-        this._rows.get(vm.uuid)?.update(vm,
-            this._settings.get_boolean('show-window-toggle'));
+        this._updateRow(vm);
     }
 
     _machine(uuid) {
         return this._machines.find(vm => vm.uuid === uuid);
+    }
+
+    // While off, the start mode is written to VirtualBox, so it matches what
+    // VirtualBox Manager shows. While running, the window is attached or
+    // detached right away.
+    async _toggleMode(uuid) {
+        const vm = this._machine(uuid);
+        if (!vm)
+            return;
+
+        if (isOn(vm.state)) {
+            await this._toggleWindow(uuid);
+            return;
+        }
+
+        const frontend = startMode(vm) === 'window' ? 'headless' : 'default';
+        try {
+            await runCommand([this._vboxmanage, 'modifyvm', vm.uuid,
+                '--default-frontend', frontend]);
+            vm.frontend = frontend === 'default' ? '' : frontend;
+            this._updateRow(vm);
+        } catch (e) {
+            Main.notifyError(`VBoxGnome: ${vm.name}`, e.message);
+        }
     }
 
     async _togglePower(uuid, on) {
@@ -425,8 +510,9 @@ class VBoxIndicator extends PanelMenu.Button {
 
         let argv;
         if (on) {
-            const type = this._settings.get_string('start-mode') === 'headless'
-                ? 'headless' : 'separate';
+            // separate keeps the machine process independent from its window,
+            // so the window can be detached later.
+            const type = startMode(vm) === 'headless' ? 'headless' : 'separate';
             argv = ['startvm', vm.uuid, '--type', type];
         } else {
             // ACPI is not delivered to a paused machine, so power it off instead.

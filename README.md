@@ -17,6 +17,8 @@ Tested on GNOME Shell 48 (Wayland) with VirtualBox 7.2.
     stopping the machine.
 - Fixed columns, so names of different lengths do not misalign states or switches.
 - Number of running machines in the panel.
+- Light polling: while the menu is closed only the process list is checked, and
+  VirtualBox is queried when a machine starts or stops and when the menu opens.
 - No snapshot handling, no state discarding.
 
 ## Start and stop modes
@@ -60,7 +62,9 @@ To uninstall, disable it and remove the directory:
 
 ## Requirements
 
-`VBoxManage` and `VirtualBoxVM` in PATH, plus `pgrep` to detect open windows.
+`VBoxManage` and `VirtualBoxVM` in PATH, plus `pgrep` to detect open windows
+and machines starting or stopping. Without `pgrep` every refresh queries
+VirtualBox.
 
 ## Debugging
 
@@ -68,6 +72,12 @@ Reinstall after a change and log out and back in: GNOME Shell imports an
 extension module once per session, so edited code is not picked up otherwise.
 
     journalctl -f -o cat /usr/bin/gnome-shell
+
+## Release
+
+Bump `version` and `version-name` in `metadata.json` and push to `main`: the
+Release workflow builds the zip and publishes it as release `v<version-name>`,
+creating the tag. Other changes to `metadata.json` only build the zip.
 
 ## License
 

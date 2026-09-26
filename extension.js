@@ -238,10 +238,16 @@ class VBoxIndicator extends PanelMenu.Button {
         this._vboxmanage = GLib.find_program_in_path('VBoxManage') ??
             GLib.find_program_in_path('vboxmanage');
         this._vboxvm = GLib.find_program_in_path('VirtualBoxVM');
+        this._pgrep = GLib.find_program_in_path('pgrep');
         this._rows = new Map();
-        this._order = [];
+        // Machines the rows were built for, null while a message is shown.
+        this._order = null;
+        this._message = null;
         this._machines = [];
+        // Machine process ids seen by the last poll.
+        this._processes = null;
         this._refreshing = false;
+        this._refreshQueued = false;
         this._timeoutId = 0;
         this._pendingIds = new Set();
         this._pendingPower = new Map();
@@ -298,7 +304,7 @@ class VBoxIndicator extends PanelMenu.Button {
         });
 
         this._restartTimer();
-        this._refresh();
+        this._poll();
     }
 
     _restartTimer() {
@@ -307,9 +313,38 @@ class VBoxIndicator extends PanelMenu.Button {
 
         this._timeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT,
             this._settings.get_int('refresh-interval'), () => {
-                this._refresh();
+                if (this.menu.isOpen)
+                    this._refresh();
+                else
+                    this._poll();
                 return GLib.SOURCE_CONTINUE;
             });
+    }
+
+    // While the menu is closed only the machine processes are listed. Each
+    // VBoxManage call costs far more, and also starts VBoxSVC whenever no
+    // machine runs, so VirtualBox is only queried when a machine process
+    // starts or exits, the only moment the running count can change.
+    async _poll() {
+        if (!this._pgrep) {
+            this._refresh();
+            return;
+        }
+
+        let out = '';
+        try {
+            out = await runCommand([this._pgrep, '-x', 'VBoxHeadless|VirtualBoxVM']);
+        } catch {
+            // pgrep fails when nothing matches: no machine is running.
+        }
+        if (this._destroyed)
+            return;
+
+        const processes = out.split('\n').filter(pid => pid !== '').sort().join(' ');
+        if (processes !== this._processes) {
+            this._processes = processes;
+            this._refresh();
+        }
     }
 
     _scheduleRefresh(delay) {
@@ -321,9 +356,15 @@ class VBoxIndicator extends PanelMenu.Button {
         this._pendingIds.add(id);
     }
 
+    // A request made while a refresh runs is repeated once it ends, since the
+    // running one may have read the machines before the change behind it.
     async _refresh() {
-        if (this._refreshing || this._destroyed)
+        if (this._destroyed)
             return;
+        if (this._refreshing) {
+            this._refreshQueued = true;
+            return;
+        }
 
         if (!this._vboxmanage) {
             this._showMessage(_('VBoxManage was not found in PATH'));
@@ -363,8 +404,15 @@ class VBoxIndicator extends PanelMenu.Button {
             this._updatePanel(machines);
         } catch (e) {
             this._showMessage(e.message);
+            // Retried at the next poll instead of waiting for a machine change.
+            this._processes = null;
         } finally {
             this._refreshing = false;
+        }
+
+        if (this._refreshQueued) {
+            this._refreshQueued = false;
+            this._refresh();
         }
     }
 
@@ -388,15 +436,14 @@ class VBoxIndicator extends PanelMenu.Button {
     // Maps VM uuid or name to the pid of its detachable window front-end.
     async _frontendPids() {
         const pids = new Map();
-        const pgrep = GLib.find_program_in_path('pgrep');
-        if (!pgrep)
+        if (!this._pgrep)
             return pids;
 
         let out;
         try {
             // -x matches the process name exactly, so unrelated command lines
             // that merely mention VirtualBoxVM are never picked up.
-            out = await runCommand([pgrep, '-a', '-x', 'VirtualBoxVM']);
+            out = await runCommand([this._pgrep, '-a', '-x', 'VirtualBoxVM']);
         } catch {
             return pids;
         }
@@ -415,18 +462,19 @@ class VBoxIndicator extends PanelMenu.Button {
 
     _updateMenu(machines) {
         const uuids = machines.map(vm => vm.uuid);
-        const sameSet = uuids.length === this._order.length &&
+        const sameSet = this._order !== null && uuids.length === this._order.length &&
             uuids.every((uuid, i) => uuid === this._order[i]);
 
         if (!sameSet) {
-            this._machineSection.removeAll();
-            this._rows.clear();
-            this._order = uuids;
-
             if (machines.length === 0) {
                 this._showMessage(_('No virtual machines'));
                 return;
             }
+
+            this._machineSection.removeAll();
+            this._rows.clear();
+            this._order = uuids;
+            this._message = null;
 
             for (const vm of machines) {
                 const uuid = vm.uuid;
@@ -578,16 +626,17 @@ class VBoxIndicator extends PanelMenu.Button {
         this._count.text = ` ${running}`;
         this._count.visible = running > 0 &&
             this._settings.get_boolean('show-running-count');
-        if (running > 0)
-            this._icon.add_style_class_name('vbox-active');
-        else
-            this._icon.remove_style_class_name('vbox-active');
     }
 
+    // Kept when unchanged, so a repeated error does not rebuild the menu.
     _showMessage(message) {
+        if (this._message === message)
+            return;
+
         this._machineSection.removeAll();
         this._rows.clear();
-        this._order = [];
+        this._order = null;
+        this._message = message;
         const item = new PopupMenu.PopupMenuItem(message);
         item.setSensitive(false);
         this._machineSection.addMenuItem(item);
